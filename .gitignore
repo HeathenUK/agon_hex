@@ -1,0 +1,8 @@
+
+bin/ahex.bin
+bin/ahex.map
+transfer.hex
+obj/src/main.c.d
+obj/src/main.c.bc
+obj/lto.src
+obj/lto.bc
