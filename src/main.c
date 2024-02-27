@@ -183,7 +183,7 @@ void fill_top_line() {
 
     size_t bytes_read = fread(x16, sizeof(uint8_t), 16, hex_file);
 
-	printf("%04X ", (unsigned int)ftell(hex_file) - bytes_read);
+	printf("%06X ", (unsigned int)ftell(hex_file) - bytes_read);
     for (size_t i = 0; i < bytes_read; ++i) {
         printf("%02X ", x16[i]);
     }
@@ -208,7 +208,7 @@ void fill_bottom_line() {
 
     printf("\r\n");
 
-	printf("%04X ", (unsigned int)ftell(hex_file) - bytes_read);
+	printf("%06X ", (unsigned int)ftell(hex_file) - bytes_read);
     for (size_t i = 0; i < bytes_read; ++i) {
         printf("%02X ", x16[i]);
     }
@@ -231,9 +231,11 @@ void redraw_current_line() {
 
     size_t bytes_read = fread(x16, sizeof(uint8_t), 16, hex_file);
 
+	cursor_tab(0, selected_y);
+
     printf("\r");
 
-	printf("%04X ", (unsigned int)ftell(hex_file) - bytes_read);
+	printf("%06X ", (unsigned int)ftell(hex_file) - bytes_read);
     for (size_t i = 0; i < bytes_read; ++i) {
         printf("%02X ", x16[i]);
     }
@@ -258,7 +260,7 @@ void fill_screen(uint16_t start_offset) {
 
     while ((line_count < 59) && (current_offset < hex_file_size)) {
         bytes_read = fread(x16, 1, 16, hex_file);
-        printf("%04lX ", current_offset);
+        printf("%06lX ", current_offset);
         for (size_t i = 0; i < bytes_read; ++i) {
             printf("%02X ", x16[i]);
         }
@@ -278,7 +280,7 @@ void fill_screen(uint16_t start_offset) {
 
 void unselect_hex() {
 
-	cursor_tab(5 + (selected_x * 3), selected_y);
+	cursor_tab(7 + (selected_x * 3), selected_y);
 	current_offset = top_offset + (16 * selected_y) + selected_x;
 	fseek(hex_file, current_offset, SEEK_SET);
 	unsigned char byte;
@@ -286,12 +288,14 @@ void unselect_hex() {
 	set_text_bg(0);
 	set_text_fg(3);
 	printf("%02X", byte);
+	cursor_tab(53 + selected_x, selected_y);
+	printf("%c", is_ag_print(byte) ? byte : '.');	
 
 }
 
 void clear_hex(uint8_t colour) {
 
-	cursor_tab(5 + (selected_x * 3), selected_y);
+	cursor_tab(7 + (selected_x * 3), selected_y);
 	set_text_bg(colour);
 	set_text_fg(3);
 	printf("  \b\b");
@@ -302,7 +306,7 @@ void clear_hex(uint8_t colour) {
 
 void select_hex(int8_t delta_x, int8_t delta_y) {
 
-	cursor_tab(5 + (selected_x * 3), selected_y);
+	cursor_tab(7 + (selected_x * 3), selected_y);
 	current_offset = top_offset + (16 * selected_y) + selected_x;
 	fseek(hex_file, current_offset, SEEK_SET);
 	
@@ -318,11 +322,12 @@ void select_hex(int8_t delta_x, int8_t delta_y) {
 	selected_x += delta_x;
 	selected_y += delta_y;
 
-	cursor_tab(5 + (selected_x * 3), selected_y);
+	cursor_tab(7 + (selected_x * 3), selected_y);
 	current_offset = top_offset + (16 * selected_y) + selected_x;
 	fseek(hex_file, current_offset, SEEK_SET);
 
 	fread(byte, 1, 4, hex_file);
+	
 	set_text_bg(1);
 	set_text_fg(3);
 	
@@ -340,7 +345,7 @@ void select_hex(int8_t delta_x, int8_t delta_y) {
 	uint8_t old_cursor_y = sv->cursorY;
 
 	//left, bottom, right, top
-	set_text_window(70,60,80,1);
+	set_text_window(72,60,80,1);
 	putch(12);
 	printf("\r\n");
 	printf("Binary:\r\n%s\r\n",to_bin(byte[0]));
@@ -399,6 +404,12 @@ uint32_t search_string(const char *search_string, uint32_t start_offset) {
 
 }
 
+void append(char *str, char ch) {
+    int len = strlen(str);
+    str[len] = ch;
+    str[len + 1] = '\0';
+}
+
 int main(int argc, char * argv[])
 {
 
@@ -426,7 +437,8 @@ int main(int argc, char * argv[])
 	
 	set_text_bg(3);
 	set_text_fg(0);
-	printf("0x   00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F ################ Decoded   ");
+	//printf("0x   00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F ################ Decoded   ");
+	printf("0x     00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F                            ");
 	set_text_bg(0);
 	set_text_fg(3);
 
@@ -436,18 +448,15 @@ int main(int argc, char * argv[])
 
 	uint32_t last_result = 0;
 
-	if (argc == 3) {
-		last_result = search_string(argv[2], 0);
-		fill_screen(last_result);
-		selected_x = (last_result % 16);
-	}
-	else fill_screen(0);
+	fill_screen(0);
 
 	select_hex(0,0);
 
 	uint16_t old_key_count = sv->vkeycount;
 
-	bool waiting_for_input = false;
+	uint8_t input_type = 0;
+	char jump[25] = "\0";
+	char search[25] = "\0";
 
 	char new_value[3] = {0};
 
@@ -467,6 +476,11 @@ int main(int argc, char * argv[])
 		// 32/1		SPACE
 		// 0/67		F3
 
+		#define INPUT_NONE		0
+		#define INPUT_REPLACE	1
+		#define INPUT_SEARCH	2
+		#define INPUT_JUMP		3
+
 		#define KEY_UP		11
 		#define KEY_DOWN	10
 		#define KEY_LEFT	8
@@ -475,70 +489,147 @@ int main(int argc, char * argv[])
 		#define KEY_SPACE	32
 		#define VKEY_PGDOWN	148
 		#define VKEY_PGUP	146
+		#define VKEY_F1		159
+		#define VKEY_F2		160
 		#define VKEY_F3		161
 
 		if (sv->vkeycount != old_key_count && sv->vkeydown == 0) {
 
-			if (waiting_for_input) {
+			if (sv->keyascii == 27 || sv->keyascii == 'q') {
+				break;
+			}
 
-				if (isxdigit(sv->keyascii)) {
+			if (input_type) {
 
-					if (new_value_1 == -1 && new_value_2 == -1) {
-						new_value_1 = sv->keyascii;
-						printf("%c", toupper(new_value_1));
-					} else if (new_value_1 != -1 && new_value_2 == -1) {
-						new_value_2 = sv->keyascii;
-						printf("%c", toupper(new_value_2));
+				if (input_type == INPUT_REPLACE) {
 
-						current_offset = top_offset + (16 * selected_y) + selected_x;
-						fseek(hex_file, current_offset, SEEK_SET);
-						
-						new_value[0] = new_value_1;
-						new_value[1] = new_value_2;
-						new_value[2] = '\0';
+					if (isxdigit(sv->keyascii)) {
 
-						uint8_t val_out = (uint8_t)strtoul(new_value, NULL, 16);
-						
-						fputc(val_out, hex_file);
-						//fwrite(&val_out, sizeof(uint8_t), 1, hex_file);
-						
-						current_offset = top_offset + (16 * selected_y);
-						fseek(hex_file, current_offset, SEEK_SET);
+						if (new_value_1 == -1 && new_value_2 == -1) {
+							new_value_1 = sv->keyascii;
+							printf("%c", toupper(new_value_1));
+						} else if (new_value_1 != -1 && new_value_2 == -1) {
+							new_value_2 = sv->keyascii;
+							printf("%c", toupper(new_value_2));
 
-						waiting_for_input = false;
-						new_value_1 = -1;
-						new_value_2 = -1;						
-						
-						redraw_current_line();
-						select_hex(0,0);
+							current_offset = top_offset + (16 * selected_y) + selected_x;
+							fseek(hex_file, current_offset, SEEK_SET);
+							
+							new_value[0] = new_value_1;
+							new_value[1] = new_value_2;
+							new_value[2] = '\0';
+
+							uint8_t val_out = (uint8_t)strtoul(new_value, NULL, 16);
+							
+							fputc(val_out, hex_file);
+							//fwrite(&val_out, sizeof(uint8_t), 1, hex_file);
+							
+							current_offset = top_offset + (16 * selected_y);
+							fseek(hex_file, current_offset, SEEK_SET);
+
+							input_type = INPUT_NONE;
+							new_value_1 = -1;
+							new_value_2 = -1;						
+							
+							redraw_current_line();
+							select_hex(0,0);
+
+						}
 
 					}
 
-				}
+				} else if (input_type == INPUT_SEARCH) {
+
+					if (isalnum(sv->keyascii) && strlen(search) < 25) {
+						printf("%c", sv->keyascii);
+						append(search, sv->keyascii);
+					
+					} else if (sv->keyascii == KEY_ENTER) {
+						cursor_set(false);
+						cursor_tab(0,0);
+						printf("                           ");
+						set_text_bg(0);
+						set_text_fg(3);								
+						set_text_window(0,60,80,1);
+						putch(0x0C); //CLS
+						last_result = search_string(search, 0);
+						fill_screen(last_result);
+						selected_x = (last_result % 16);
+						select_hex(0,0);
+						input_type = INPUT_NONE;
+						//search[0] = '\0';
+					}
+
+				} else if (input_type == INPUT_JUMP) {
+
+					if ((isxdigit(sv->keyascii) || sv->keyascii == 'x' || sv->keyascii == 'X') && strlen(jump) < 25) {
+						printf("%c", sv->keyascii);
+						append(jump, sv->keyascii);
+					} else if (sv->keyascii == KEY_ENTER) {
+						cursor_set(false);
+						cursor_tab(0,0);
+						printf("                           ");
+						set_text_bg(0);
+						set_text_fg(3);								
+						set_text_window(0,60,80,1);
+						putch(0x0C); //CLS
+						fill_screen(strtoul(jump,NULL,16));
+						selected_x = 0;
+						selected_y = 0;
+						select_hex(0,0);
+						input_type = INPUT_NONE;
+
+					}
+
+				}				
 
 			} else {
 			
 				//print_to_debug("Key pressed: %u / %u\r\n", sv->keyascii, sv->vkeycode);
 
-				if (sv->keyascii == 27 || sv->keyascii == 'q') {
-					break;
-				}
-
-				else if (sv->vkeycode == VKEY_F3) {
+				if (sv->vkeycode == VKEY_F3) {
 
 					putch(0x0C); //CLS
-					last_result = search_string(argv[2], last_result + 1);
+					last_result = search_string(search, last_result + 1);
 					fill_screen(last_result);
 					selected_x = (last_result % 16);
 					select_hex(0,0);
 
 				}
 
+				else if (sv->vkeycode == VKEY_F1) {
+
+					//left, bottom, right, top
+					set_text_window(53,1,80,0);
+					cursor_tab(0,0);
+					cursor_set(true);
+					set_text_bg(3);
+					set_text_fg(0);					
+					
+					input_type = INPUT_JUMP;
+					jump[0] = '\0';
+
+				}
+
+				else if (sv->vkeycode == VKEY_F2) {
+
+					//left, bottom, right, top
+					set_text_window(53,1,80,0);
+					cursor_tab(0,0);
+					cursor_set(true);
+					set_text_bg(3);
+					set_text_fg(0);
+
+					input_type = INPUT_SEARCH;
+					search[0] = '\0';
+
+				}				
+
 				else if (sv->keyascii == KEY_SPACE) {
 
 					redraw_current_line();
 					clear_hex(2);
-					waiting_for_input = true;
+					input_type = INPUT_REPLACE;
 					new_value_1 = -1;
 					new_value_2 = -1;
 
