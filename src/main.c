@@ -266,7 +266,7 @@ void fill_screen(uint16_t start_offset) {
             printf("%*s", (int)(16 - bytes_read) * 3, "");
         }
         for (size_t i = 0; i < bytes_read; ++i) {
-            printf("%c", is_ag_print(x16[i]) ? x16[i] : '.');
+			printf("%c", is_ag_print(x16[i]) ? x16[i] : '.');
         }
         current_offset += bytes_read;
         line_count++;
@@ -312,6 +312,8 @@ void select_hex(int8_t delta_x, int8_t delta_y) {
 	set_text_bg(0);
 	set_text_fg(3);
 	printf("%02X", byte[0]);
+	cursor_tab(53 + selected_x, selected_y);
+	printf("%c", is_ag_print(byte[0]) ? byte[0] : '.');	
 
 	selected_x += delta_x;
 	selected_y += delta_y;
@@ -323,7 +325,12 @@ void select_hex(int8_t delta_x, int8_t delta_y) {
 	fread(byte, 1, 4, hex_file);
 	set_text_bg(1);
 	set_text_fg(3);
+	
 	printf("%02X", byte[0]);
+
+	cursor_tab(53 + selected_x, selected_y);
+	printf("%c", is_ag_print(byte[0]) ? byte[0] : '.');
+
 	set_text_bg(0);
 	set_text_fg(3);
 
@@ -363,6 +370,35 @@ void select_hex(int8_t delta_x, int8_t delta_y) {
 
 }
 
+uint32_t search_string(const char *search_string, uint32_t start_offset) {
+
+    size_t len = strlen(search_string);
+    char *buffer = (char *)malloc(len + 1);
+    if (!buffer) {
+        printf("Memory allocation failed\r\n");
+		return 0;
+    }
+    buffer[len] = '\0';
+
+    uint32_t  position = start_offset;
+    while (fseek(hex_file, position, SEEK_SET) == 0) {
+        if (fread(buffer, 1, len, hex_file) == len) {
+            if (strncmp(buffer, search_string, len) == 0) {
+                break;
+            }
+        } else {
+            free(buffer);
+			return 0;
+        }
+        position++;
+    }
+
+    free(buffer);
+
+    return position;
+
+}
+
 int main(int argc, char * argv[])
 {
 
@@ -398,7 +434,15 @@ int main(int argc, char * argv[])
 	set_text_window(0,60,80,1);
 	cursor_tab(0,0);	
 
-	fill_screen(0);
+	uint32_t last_result = 0;
+
+	if (argc == 3) {
+		last_result = search_string(argv[2], 0);
+		fill_screen(last_result);
+		selected_x = (last_result % 16);
+	}
+	else fill_screen(0);
+
 	select_hex(0,0);
 
 	uint16_t old_key_count = sv->vkeycount;
@@ -421,6 +465,7 @@ int main(int argc, char * argv[])
 		// 21/156	RIGHT
 		// 13/143	ENTER
 		// 32/1		SPACE
+		// 0/67		F3
 
 		#define KEY_UP		11
 		#define KEY_DOWN	10
@@ -430,6 +475,7 @@ int main(int argc, char * argv[])
 		#define KEY_SPACE	32
 		#define VKEY_PGDOWN	148
 		#define VKEY_PGUP	146
+		#define VKEY_F3		161
 
 		if (sv->vkeycount != old_key_count && sv->vkeydown == 0) {
 
@@ -476,6 +522,16 @@ int main(int argc, char * argv[])
 
 				if (sv->keyascii == 27 || sv->keyascii == 'q') {
 					break;
+				}
+
+				else if (sv->vkeycode == VKEY_F3) {
+
+					putch(0x0C); //CLS
+					last_result = search_string(argv[2], last_result + 1);
+					fill_screen(last_result);
+					selected_x = (last_result % 16);
+					select_hex(0,0);
+
 				}
 
 				else if (sv->keyascii == KEY_SPACE) {
