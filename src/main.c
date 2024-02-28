@@ -316,7 +316,7 @@ void select_hex(int8_t delta_x, int8_t delta_y) {
 	set_text_bg(0);
 	set_text_fg(3);
 	printf("%02X", byte[0]);
-	cursor_tab(53 + selected_x, selected_y);
+	cursor_tab(55 + selected_x, selected_y);
 	printf("%c", is_ag_print(byte[0]) ? byte[0] : '.');	
 
 	selected_x += delta_x;
@@ -333,7 +333,7 @@ void select_hex(int8_t delta_x, int8_t delta_y) {
 	
 	printf("%02X", byte[0]);
 
-	cursor_tab(53 + selected_x, selected_y);
+	cursor_tab(55 + selected_x, selected_y);
 	printf("%c", is_ag_print(byte[0]) ? byte[0] : '.');
 
 	set_text_bg(0);
@@ -349,7 +349,6 @@ void select_hex(int8_t delta_x, int8_t delta_y) {
 	putch(12);
 	printf("\r\n");
 	printf("Binary:\r\n%s\r\n",to_bin(byte[0]));
-	printf("\r\n");
 	printf("uint8:\r\n%u\r\n", byte[0]);	
 	printf("\r\n");
 	printf("int8:\r\n%d\r\n", (char)byte[0]);
